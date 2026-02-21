@@ -29,6 +29,10 @@ contract FreelanceBountyBoard {
     // - How will you store bounty information?
     // - How will you manage payments? 
 
+    mapping(address => Freelancer) public freelancers;
+    mapping(uint256 => Bounty) public bounties;
+    uint256 public bountyCounter;
+
     address public owner;
     
     event FreelancerRegistered(address freelancer, string skill);
@@ -53,15 +57,28 @@ contract FreelanceBountyBoard {
         emit FreelancerRegistered(msg.sender, skill);
     }
     
+
     // TODO: Implement postBounty function
     // Requirements:
     // - Employers post bounties with bounty (msg.value)
     // - Store bounty description and required skill
     // - Ensure ETH is sent with the transaction
     // - Emit an event when bounty is posted
+
     function postBounty(string memory description, string memory skillRequired) public payable {
-        // Your implementation here
-        // Think: How do you safely hold the ETH until work is approved?
+        require (msg.value > 0, "Bounty must have a positive value");
+        uint256 bountyId = bounties,Legnth;
+        bountyCounter++;
+        bounties[bountyCounter] = Bounty({
+            employer: msg.sender,
+            description: description,
+            skillRequired: skillRequired,
+            amount: msg.value,
+            isCompleted: false,
+            freelancer: address(0),
+            submissionUrl: ""
+        });
+        emit BountyPosted(bountyCounter, msg.sender, description, skillRequired, msg.value);
     }
     
     // TODO: Implement applyForBounty function
@@ -71,7 +88,14 @@ contract FreelanceBountyBoard {
     // - Prevent duplicate applications
     // - Emit an event
     function applyForBounty(uint256 bountyId) public {
-        // Your implementation here
+        require(bountyId > 0 && bountyId <= bountyCounter, "Invalid bounty ID");
+        require(freelancers[msg.sender].isRegistered, "Freelancer not registered");
+        require(bounties[bountyId].freelancer == address(0), "Already has an applicant");
+        keccak256(abi.encodePacked(freelancers[msg.sender].skill)) ==
+        keccak256(abi.encodePacked(bounties[bountyId].skillRequired)),
+        "Freelancer doesn't have required skill"
+        bounties[bountyId].freelancer = msg.sender;
+        emit BountyApplied(bountyId, msg.sender);
     }
     
     // TODO: Implement submitWork function
@@ -81,7 +105,11 @@ contract FreelanceBountyBoard {
     // - Update bounty status
     // - Emit an event
     function submitWork(uint256 bountyId, string memory submissionUrl) public {
-        // Your implementation here
+        require(bountyId > 0 && bountyId <= bountyCounter, "Invalid bounty ID");
+        require(bounties[bountyId].freelancer == msg.sender, "Not the applicant for this bounty");
+        require(bounties[bountyId].isCompleted == false, "Bounty already completed");
+        bounties[bountyId].submissionUrl = submissionUrl;
+        emit WorkSubmitted(bountyId, msg.sender, submissionUrl);
     }
     
     // TODO: Implement approveAndPay function
@@ -92,8 +120,19 @@ contract FreelanceBountyBoard {
     // - Update bounty status to completed
     // - Emit an event
     function approveAndPay(uint256 bountyId, address freelancer) public {
-        // Your implementation here
-        // Security: Use checks-effects-interactions pattern!
+        require(bountyId > 0 && bountyId <= bountyCounter, "Invalid bounty ID");
+        require(msg.sender == bounties[bountyId].employer, "Only employer can approve");
+        require(bounties[bountyId].freelancer == freelancer, "Not the applicant for this bounty");
+        require(bounties[bountyId].isCompleted == false, "Bounty already completed");
+        require(address(this).balance >= bounties[bountyId].amount, "Insufficient funds");
+
+        // Checks done, now effects
+        bounties[bountyId].isCompleted = true;
+
+        // Interactions last
+        payable(freelancer).transfer(bounties[bountyId].amount);
+
+        emit BountyApproved(bountyId, freelancer, bounties[bountyId].amount);
     }
     
     // BONUS: Implement dispute resolution
